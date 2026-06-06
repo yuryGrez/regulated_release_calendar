@@ -1,0 +1,78 @@
+# Development overrides — hot reload for all services
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: '3.9'
+
+services:
+  gateway:
+    build:
+      context: ./services/gateway
+      target: dev
+    volumes:
+      - ./services/gateway/src:/app/src:ro
+    environment:
+      LOG_LEVEL: debug
+
+  release-svc:
+    build:
+      context: ./services/release
+      target: dev
+    volumes:
+      - ./services/release/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+      SKIP_AUTH: "true"
+      LOG_LEVEL: debug
+
+  risk-engine:
+    build:
+      context: ./services/risk-engine
+      target: dev
+    volumes:
+      - ./services/risk-engine/src:/app/src:ro
+    environment:
+      RELOAD: "true"
+      LOG_LEVEL: debug
+
+  calendar-svc:
+    build:
+      context: ./services/calendar
+      target: dev
+    volumes:
+      - ./services/calendar/src:/app/src:ro
+    environment:
+      RELOAD: "true"
+      LOG_LEVEL: debug
+
+  audit-svc:
+    build:
+      context: ./services/audit
+      target: dev
+    volumes:
+      - ./services/audit/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+      SKIP_AUTH: "true"
+      LOG_LEVEL: debug
+
+  notifications-svc:
+    build:
+      context: ./services/notifications
+      target: dev
+    volumes:
+      - ./services/notifications/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    ports: ['5173:5173']
+    volumes:
+      - ./frontend/src:/app/src:ro
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:8080
+      VITE_CALENDAR_URL: http://localhost:8080
+      VITE_AUDIT_URL: http://localhost:8080

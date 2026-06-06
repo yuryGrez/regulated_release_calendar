@@ -1,0 +1,211 @@
+version: '3.9'
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rrc_db
+      POSTGRES_USER: rrc_user
+      POSTGRES_PASSWORD: password
+    ports: ['5432:5432']
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rrc_user -d rrc_db']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:latest
+    ports: ['4566:4566']
+    environment:
+      SERVICES: sqs,s3
+      DEFAULT_REGION: eu-west-2
+      DEBUG: 0
+    volumes:
+      - localstack:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./infra/scripts/init-localstack.sh:/etc/localstack/init/ready.d/init.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:4566/_localstack/health || exit 1']
+      interval: 10s
+      timeout: 10s
+      start_period: 30s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports: ['9000:9000', '9001:9001']
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Seeds dev data after postgres is healthy and migrations have run
+  seed:
+    image: postgres:16-alpine
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: password
+    volumes:
+      - ./infra/scripts/seed-dev.sql:/seed.sql:ro
+    command: >
+      sh -c "psql -h postgres -U rrc_user -d rrc_db -f /seed.sql && echo 'Seed complete'"
+    restart: "no"
+
+  # ── Application services ─────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: ./services/gateway
+      target: production
+    ports: ['8080:8080']
+    env_file: .env
+    environment:
+      RELEASE_SVC_URL:  http://release-svc:8081
+      CALENDAR_SVC_URL: http://calendar-svc:8083
+      AUDIT_SVC_URL:    http://audit-svc:8084
+      GATEWAY_PORT:     "8080"
+    depends_on:
+      - release-svc
+      - calendar-svc
+      - audit-svc
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  release-svc:
+    build:
+      context: ./services/release
+      target: production
+    ports: ['8081:8081']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rrc_user:password@postgres:5432/rrc_db
+      REDIS_URL: redis://redis:6379
+      SQS_QUEUE_URL_RELEASES: http://localstack:4566/000000000000/rrc-releases.fifo
+      RELEASE_SVC_PORT: "8081"
+    depends_on:
+      postgres:   { condition: service_healthy }
+      redis:      { condition: service_healthy }
+      localstack: { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8081/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  risk-engine:
+    build:
+      context: ./services/risk-engine
+      target: production
+    ports: ['8082:8082']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rrc_user:password@postgres:5432/rrc_db
+      REDIS_URL: redis://redis:6379
+      SQS_QUEUE_URL_RELEASES: http://localstack:4566/000000000000/rrc-releases.fifo
+      SQS_QUEUE_URL_NOTIFICATIONS: http://localstack:4566/000000000000/rrc-notifications.fifo
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AUDIT_SVC_URL: http://audit-svc:8084
+    depends_on:
+      postgres:   { condition: service_healthy }
+      redis:      { condition: service_healthy }
+      localstack: { condition: service_healthy }
+      audit-svc:  { condition: service_healthy }
+    restart: unless-stopped
+
+  calendar-svc:
+    build:
+      context: ./services/calendar
+      target: production
+    ports: ['8083:8083']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rrc_user:password@postgres:5432/rrc_db
+      REDIS_URL: redis://redis:6379
+      CALENDAR_SVC_PORT: "8083"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:8083/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  audit-svc:
+    build:
+      context: ./services/audit
+      target: production
+    ports: ['8084:8084']
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rrc_user:password@postgres:5432/rrc_db
+      S3_ENDPOINT: http://minio:9000
+      AUDIT_SVC_PORT: "8084"
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio:    { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8084/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  notifications-svc:
+    build:
+      context: ./services/notifications
+      target: production
+    ports: ['8085:8085']
+    env_file: .env
+    environment:
+      SQS_QUEUE_URL_NOTIFICATIONS: http://localstack:4566/000000000000/rrc-notifications.fifo
+      AWS_ENDPOINT_URL: http://localstack:4566
+      NOTIF_SVC_PORT: "8085"
+    depends_on:
+      localstack: { condition: service_healthy }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    ports: ['3000:3000']
+    env_file: .env
+    depends_on:
+      gateway: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  localstack:
+  minio:

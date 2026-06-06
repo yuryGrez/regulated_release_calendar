@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  /* Risk badge pulse for BLOCKED */
+  .badge-blocked-pulse {
+    animation: badge-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes badge-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.65; }
+  }
+
+  /* Calendar window bands */
+  .window-band-blackout      { @apply bg-red-100 border-l-2 border-red-400; }
+  .window-band-freeze        { @apply bg-amber-100 border-l-2 border-amber-400; }
+  .window-band-audit         { @apply ring-1 ring-yellow-400 bg-yellow-50; }
+
+  /* Day cell hover */
+  .calendar-day:hover        { @apply bg-white shadow-sm cursor-pointer; }
+  .calendar-day-empty:hover  { @apply bg-blue-50; }
+}

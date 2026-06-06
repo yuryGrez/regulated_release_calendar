@@ -1,0 +1,13 @@
+# Railway deployment configuration — monorepo
+# Each service is deployed as a separate Railway service.
+# All services share a Railway project; infra (Postgres, Redis) uses Railway plugins.
+#
+# Deploy steps:
+#   1. railway login
+#   2. railway init  (creates project)
+#   3. For each service directory: railway up --service <name>
+#   See deploy/railway-deploy.sh for automated deployment
+
+[build]
+builder = "DOCKERFILE"
+watchPatterns = ["services/**", "infra/**"]

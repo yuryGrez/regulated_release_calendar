@@ -1,0 +1,38 @@
+{
+  "name": "Regulated Release Calendar",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    "ghcr.io/devcontainers/features/aws-cli:1": {}
+  },
+
+  // Forward all service ports to your browser
+  "forwardPorts": [3000, 8080, 8081, 8082, 8083, 8084, 8085, 5432, 6379, 4566, 9000, 9001],
+  "portsAttributes": {
+    "3000": { "label": "Frontend",         "onAutoForward": "openBrowser" },
+    "8080": { "label": "Gateway" },
+    "8081": { "label": "Release Service" },
+    "8082": { "label": "Risk Engine" },
+    "8083": { "label": "Calendar Service" },
+    "8084": { "label": "Audit Service" },
+    "8085": { "label": "Notifications" },
+    "9001": { "label": "MinIO Console" }
+  },
+
+  "postCreateCommand": "cp .env.example .env && echo 'SKIP_AUTH=true' >> .env",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}

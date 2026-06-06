@@ -1,0 +1,8 @@
+# Test-only deps that work without compiled wheels (for Python 3.14 dev machines)
+# In production use requirements.txt with Python 3.12 inside Docker
+pytest==8.1.1
+pytest-asyncio==0.23.6
+beautifulsoup4==4.12.3
+feedparser==6.0.11
+requests==2.31.0
+structlog==24.1.0
