@@ -28,6 +28,19 @@ export function authMiddleware(req, res, next) {
     return next();
   }
 
+  // SKIP_AUTH=true bypasses JWT validation — for dev/staging only.
+  // Requires x-tenant-id header to be set manually by the caller.
+  if (process.env.SKIP_AUTH === 'true') {
+    const tenantId = req.headers['x-tenant-id'];
+    if (!tenantId) {
+      return res.status(401).json({
+        error: { code: 'MISSING_TENANT', message: 'x-tenant-id header required when SKIP_AUTH=true' },
+      });
+    }
+    logger.warn({ msg: 'auth_skipped', tenant_id: tenantId, path: req.path });
+    return next();
+  }
+
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({
